@@ -144,6 +144,7 @@ public class MainView extends JFrame {
 				if(e.getClickCount()==2){   //When double click JList
 					JList k=(JList)e.getSource();
 					User target = (User) contact.getModel().getElementAt(k.getSelectedIndex());
+					
 					if (!Conts.WINDOW_SET.contains(target.getUser_id())) {
 						ChatView chatview = new ChatView(getuser(), target);
 						Runchatthread runchat = new Runchatthread(chatview);

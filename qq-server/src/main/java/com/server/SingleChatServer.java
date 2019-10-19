@@ -2,7 +2,10 @@ package com.server;
 
 import SocketServer.ServerView;
 import com.alibaba.fastjson.JSON;
-import com.jenkin.model.Message;;
+import com.jenkin.Const;
+import com.jenkin.model.Message;
+import com.jenkin.util.RabbitMqUtils;
+import com.rabbitmq.client.Channel;;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -126,17 +129,26 @@ public class SingleChatServer {
     }
 
     private static void doWrite(SocketChannel socketChannel, String result,ServerView view) throws IOException {
+        Channel mqChannel = Const.PRODUCT_PRIVATE_CHANNEL;
+        Channel topicChannel = Const.PRODUCT_TOPIC_CHANNEL;
+
         if(result!=null) {
             Message message = JSON.parseObject(result, Message.class);
             socketMap.put(message.getUser_id(), socketChannel);
             if(message.getUser_id()!=null&&message.getSend_to()!=null) {
+                String queue = message.getUser_id()+"->"+message.getSend_to();
+
                 if(message.getChat_model().equals("group")){
                     socketMap.keySet().forEach(item->{
                         if(!item.equals(message.getUser_id())){
                             SocketChannel channel = socketMap.get(item);
+                            RabbitMqUtils.sendMessage(topicChannel,result,Const.MESSAGE_TOPIC_EXCHANGE,queue);
+
                             if(channel!=null&&channel.isConnected()) {
                                 try {
+
                                     sendMessage(channel,result);
+
                                 } catch (IOException e) {
                                     e.printStackTrace();
                                 }
@@ -153,9 +165,12 @@ public class SingleChatServer {
 
                         }
                         SocketChannel channel = socketMap.get(message.getSend_to());
+                        RabbitMqUtils.sendMessage(mqChannel,result,Const.MESSAGE_PRIVATE_EXCHANGE,queue);
+
 //                        System.out.println(channel.getRemoteAddress());
                         if(channel!=null&&channel.isConnected()) {
                            sendMessage(channel,result);
+
                         }
                     }
 //                    if(!message.getMsg_model().equals("1")){

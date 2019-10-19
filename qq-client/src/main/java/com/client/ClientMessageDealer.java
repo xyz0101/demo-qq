@@ -2,7 +2,13 @@ package com.client;
 
 import clientview.ChatView;
 import com.alibaba.fastjson.JSON;
-import com.jenkin.model.Message;;
+import com.jenkin.Const;
+import com.jenkin.model.Message;
+import com.jenkin.util.RabbitMqUtils;
+import com.rabbitmq.client.AMQP;
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.DefaultConsumer;
+import com.rabbitmq.client.Envelope;;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -11,27 +17,34 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.util.Iterator;
+import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static sun.plugin2.os.windows.OSVERSIONINFOA.size;
+
 public class ClientMessageDealer implements Runnable {
     private final String URL = "127.0.0.1";
+
     private SocketChannel socketChannel;
     private final int PORT = 8888;
     private Selector selector;
     private ChatView view;
+    private String chatId ;
     private ExecutorService executor =Executors.newFixedThreadPool(20);
     private volatile boolean STOP = false;
     private volatile boolean connectStatus = false;
     public ClientMessageDealer(ChatView view) {
         try {
-
+            Const.MESSAGE_CHANNEL = RabbitMqUtils.getChannel();
             STOP=false;
             selector = Selector.open();
             this.view = view;
+            this.chatId = view.myself.getUser_id()+"-"+view.destination.getUser_id();
             socketChannel = SocketChannel.open();
             socketChannel.configureBlocking(false);
+            readMessage(null);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -123,12 +136,37 @@ public class ClientMessageDealer implements Runnable {
     }
 
     private void readMessage(String result) {
+        System.out.println("读取消息");
         executor.submit(()->{
+            Channel channel = Const.MESSAGE_CHANNEL;
             try {
-                    System.out.println("NIO收到消息---->"+ result);
-                    Message message = JSON.parseObject(result,Message.class);
-                    view.showmessage(message);
+                String queue = view.destination.getUser_id() + "->" + view.myself.getUser_id();
+                channel.basicConsume(queue
+                        ,false,new DefaultConsumer(channel){
+                    @Override
+                    public void handleDelivery(String consumerTag,
+                                               Envelope envelope,
+                                               AMQP.BasicProperties properties,
+                                               byte[] body) throws IOException {
+                        String key = envelope.getRoutingKey();
+                        String message = new String(body);
+                        long deliveryTag = envelope.getDeliveryTag();
+                        if (key.equals(queue )&&!STOP) { // only consumer io warning messages
+                            //consume message
+                            System.out.println("NIO收到消息---->" +message);
+                            Message msg = JSON.parseObject(message,Message.class);
+                            view.showmessage(msg);
+                            channel.basicAck(deliveryTag, false);
+                        } else { //reject other messages and requeue them
+                            channel.basicNack(deliveryTag, false,true);
+                            if(STOP){
+                                throw new RuntimeException("关闭聊天");
+                            }
+                            System.out.println("rejected: " + message);
 
+                        }
+                    }
+                });
             }catch (Exception e){
                 e.printStackTrace();
             }

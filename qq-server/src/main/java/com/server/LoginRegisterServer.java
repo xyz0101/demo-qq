@@ -3,9 +3,11 @@ package com.server;
 import SocketServer.ServerView;
 import com.alibaba.fastjson.JSON;
 import com.data.Userdao;
+import com.jenkin.Const;
 import com.jenkin.model.Message;;
 import com.jenkin.model.Response;
 import com.jenkin.model.User;
+import com.jenkin.util.RabbitMqUtils;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -176,6 +178,7 @@ public class LoginRegisterServer {
                         System.out.println("用户 " + user.getUser_name() + " 登录成功");
 
                     }
+                    bindMessageQueue(list,user);
                     response = Response.successRes(list);
                 }else{
                     response = Response.loginErrorRes();
@@ -220,5 +223,25 @@ public class LoginRegisterServer {
 
             }
         }
+    }
+
+    private static void bindMessageQueue(List<User> list, User user) {
+        list.forEach(item->{
+            if(!user.getUser_id().equals(item.getUser_id())) {
+                String toQueue = user.getUser_id() + "->" + item.getUser_id();
+                String backQueue = item.getUser_id() + "->" + user.getUser_id();
+                RabbitMqUtils.declareQueue(Const.PRODUCT_PRIVATE_CHANNEL, toQueue);
+                RabbitMqUtils.declareQueue(Const.PRODUCT_PRIVATE_CHANNEL, backQueue);
+                RabbitMqUtils.queueBindExchange(Const.PRODUCT_PRIVATE_CHANNEL, toQueue, Const.MESSAGE_PRIVATE_EXCHANGE, toQueue);
+                RabbitMqUtils.queueBindExchange(Const.PRODUCT_PRIVATE_CHANNEL, backQueue, Const.MESSAGE_PRIVATE_EXCHANGE, backQueue);
+            }
+            String groupQueue = item.getUser_id() + "->" + item.getUser_id();
+            RabbitMqUtils.declareQueue(Const.PRODUCT_TOPIC_CHANNEL, groupQueue);
+            RabbitMqUtils.queueBindExchange(Const.PRODUCT_TOPIC_CHANNEL, groupQueue, Const.MESSAGE_TOPIC_EXCHANGE, groupQueue);
+        });
+        String groupQueue = user.getUser_id() + "->" + user.getUser_id();
+        RabbitMqUtils.declareQueue(Const.PRODUCT_TOPIC_CHANNEL, groupQueue);
+        RabbitMqUtils.queueBindExchange(Const.PRODUCT_TOPIC_CHANNEL, groupQueue, Const.MESSAGE_TOPIC_EXCHANGE, groupQueue);
+
     }
 }

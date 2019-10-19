@@ -234,7 +234,10 @@ public class ChatView extends JFrame implements MouseListener{
 		String msg = JSON.toJSONString(message);
 		System.out.println("发送Nio消息=====>"+msg);
 		try {
-			Conts.WINDOW_MAP.get(destination.getUser_id()) .doWrite(msg);
+			ClientMessageDealer clientMessageDealer = Conts.WINDOW_MAP.get(destination.getUser_id());
+			if (clientMessageDealer!=null) {
+				clientMessageDealer.doWrite(msg);
+			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
